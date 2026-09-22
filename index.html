@@ -87,28 +87,58 @@ track.innerHTML=visible.map(p=>'<section class="slide" role="group" aria-label="
 let index=realCount,dragging=false,animating=false,locked=false,startX=0,baseX=0,lastX=0,lastTime=0,velocity=0,pointerId=null,transitionFallback=null,samples=[];
 const canonical=i=>realCount+((i%realCount)+realCount)%realCount;
 const limit=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
-function syncFrame(){
- const p=pups[((index%realCount)+realCount)%realCount];
- const root=document.documentElement;
- root.style.setProperty('--frame-light',p.c[0]);
- root.style.setProperty('--frame-base',p.c[1]);
- root.style.setProperty('--frame-dark',p.c[2]);
-}
-
+/* The document canvas can remain visible beneath a standalone tablet viewport.
+   Match that exposed strip to the exact two panels currently crossing the screen. */
+let bleedFrame=0;
 const w=()=>viewport.clientWidth||innerWidth;
 const pos=()=>-index*w();
+function paintBleed(px){
+ const width=w();
+ if(!width)return;
+ const offset=Math.max(0,Math.min(visible.length-1,-px/width));
+ const left=Math.floor(offset),right=Math.min(left+1,visible.length-1);
+ const progress=offset-left;
+ const root=document.documentElement;
+ const patternSize=parseFloat(getComputedStyle(root).getPropertyValue('--pattern-size'))||256;
+ const phase=(px+left*width-width*.1)%patternSize;
+ const phaseY=(-(viewport.clientHeight||innerHeight)*.1)%patternSize;
+ root.style.setProperty('--bleed-left',visible[left].c[2]);
+ root.style.setProperty('--bleed-right',visible[right].c[2]);
+ root.style.setProperty('--bleed-split',((1-progress)*100).toFixed(3)+'%');
+ root.style.setProperty('--bleed-pattern-x',phase.toFixed(2)+'px');
+ root.style.setProperty('--bleed-pattern-y',phaseY.toFixed(2)+'px');
+}
+function trackOffset(){
+ const value=getComputedStyle(track).transform;
+ return value&&value!=='none'?new DOMMatrixReadOnly(value).m41:pos();
+}
+function stopBleed(){
+ if(bleedFrame){cancelAnimationFrame(bleedFrame);bleedFrame=0;}
+}
+function tickBleed(){
+ bleedFrame=0;
+ paintBleed(trackOffset());
+ if(animating)bleedFrame=requestAnimationFrame(tickBleed);
+}
+function syncFrame(){paintBleed(pos());}
 function move(px,animate=false,duration=340){
  clearTimeout(transitionFallback);
  track.style.transition=animate?'transform '+duration+'ms var(--swipe-ease)':'none';
  track.style.transform='translate3d('+px+'px,0,0)';
  if(animate){
    animating=true;
+   if(!bleedFrame)bleedFrame=requestAnimationFrame(tickBleed);
    transitionFallback=setTimeout(complete,duration+80);
- }else animating=false;
+ }else{
+   animating=false;
+   stopBleed();
+   paintBleed(px);
+ }
 }
 function complete(){
  clearTimeout(transitionFallback);
  animating=false;
+ stopBleed();
  const normalized=canonical(index);
  if(normalized!==index){index=normalized;move(pos());}
  syncFrame();
@@ -132,6 +162,8 @@ function down(e){
    track.style.transition="none";
    track.style.transform="translate3d("+baseX+"px,0,0)";
    animating=false;
+   stopBleed();
+   paintBleed(baseX);
  }else baseX=pos();
  dragging=true;pointerId=e.pointerId;
  startX=lastX=e.clientX;
