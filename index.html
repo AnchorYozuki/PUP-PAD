@@ -15,11 +15,22 @@ body{font-family:system-ui,-apple-system,sans-serif;background:transparent}
 /* iPadOS standalone may reserve a lower safe-area strip outside the fixed viewport.
    Give the document canvas the current page's palette rather than exposing the old blue body. */
 html{
- --frame-light:#409acb;--frame-base:#0c477c;--frame-dark:#092d52;
- background:
+ /* The root canvas also paints the tablet's area below the fixed viewport.
+    Two hard-edged colors follow adjacent panels during an active swipe. */
+ --bleed-left:#092d52;
+ --bleed-right:#092d52;
+ --bleed-split:100%;
+ --bleed-pattern-x:0px;
+ --bleed-pattern-y:0px;
+ background-image:
   radial-gradient(ellipse at 50% 44%,rgba(255,255,255,.19) 0%,transparent 35%,rgba(0,0,0,.12) 68%,rgba(0,9,28,.55) 100%),
-  linear-gradient(180deg,var(--frame-light),var(--frame-base) 50%,var(--frame-dark));
- background-color:var(--frame-dark);
+  url("assets/pattern-dog-bones.png"),
+  linear-gradient(to right,var(--bleed-left) 0%,var(--bleed-left) var(--bleed-split),var(--bleed-right) var(--bleed-split),var(--bleed-right) 100%);
+ background-size:100% 100%,var(--pattern-size) var(--pattern-size),100% 100%;
+ background-repeat:no-repeat,repeat,no-repeat;
+ background-position:center center,var(--bleed-pattern-x) var(--bleed-pattern-y),center center;
+ background-blend-mode:normal,soft-light,normal;
+ background-color:var(--bleed-left);
 }
 .screen{position:fixed;inset:0;overflow:hidden}
 /* Overscan the bottom on landscape tablets; fall back to the synchronized
@@ -37,7 +48,7 @@ html{
 #start{appearance:none;position:relative;z-index:1;display:grid;place-items:center;width:min(45vw,61vh,350px);aspect-ratio:1;border:0;background:none;padding:0;cursor:pointer;touch-action:manipulation;transition:transform 130ms ease,filter 130ms ease}
 #start img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(0,10,30,.43)) drop-shadow(0 0 18px rgba(130,220,255,.45))}
 #start:active,#start.pressed{transform:scale(.89);filter:brightness(1.22)}
-#app{background:#092e54}
+#app{background:transparent}
 #viewport{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab}
 #track{position:absolute;top:0;left:0;height:100%;display:flex;will-change:transform;transform:translate3d(0,0,0)}
 .slide{position:relative;isolation:isolate;display:grid;place-items:center;width:100vw;flex:0 0 100vw;height:100%;overflow:hidden;background:linear-gradient(180deg,var(--light),var(--base) 50%,var(--dark))}
@@ -76,28 +87,58 @@ track.innerHTML=visible.map(p=>'<section class="slide" role="group" aria-label="
 let index=realCount,dragging=false,animating=false,locked=false,startX=0,baseX=0,lastX=0,lastTime=0,velocity=0,pointerId=null,transitionFallback=null,samples=[];
 const canonical=i=>realCount+((i%realCount)+realCount)%realCount;
 const limit=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
-function syncFrame(){
- const p=pups[((index%realCount)+realCount)%realCount];
- const root=document.documentElement;
- root.style.setProperty('--frame-light',p.c[0]);
- root.style.setProperty('--frame-base',p.c[1]);
- root.style.setProperty('--frame-dark',p.c[2]);
-}
-
+/* The document canvas can remain visible beneath a standalone tablet viewport.
+   Match that exposed strip to the exact two panels currently crossing the screen. */
+let bleedFrame=0;
 const w=()=>viewport.clientWidth||innerWidth;
 const pos=()=>-index*w();
+function paintBleed(px){
+ const width=w();
+ if(!width)return;
+ const offset=Math.max(0,Math.min(visible.length-1,-px/width));
+ const left=Math.floor(offset),right=Math.min(left+1,visible.length-1);
+ const progress=offset-left;
+ const root=document.documentElement;
+ const patternSize=parseFloat(getComputedStyle(root).getPropertyValue('--pattern-size'))||256;
+ const phase=(px+left*width-width*.1)%patternSize;
+ const phaseY=(-(viewport.clientHeight||innerHeight)*.1)%patternSize;
+ root.style.setProperty('--bleed-left',visible[left].c[2]);
+ root.style.setProperty('--bleed-right',visible[right].c[2]);
+ root.style.setProperty('--bleed-split',((1-progress)*100).toFixed(3)+'%');
+ root.style.setProperty('--bleed-pattern-x',phase.toFixed(2)+'px');
+ root.style.setProperty('--bleed-pattern-y',phaseY.toFixed(2)+'px');
+}
+function trackOffset(){
+ const value=getComputedStyle(track).transform;
+ return value&&value!=='none'?new DOMMatrixReadOnly(value).m41:pos();
+}
+function stopBleed(){
+ if(bleedFrame){cancelAnimationFrame(bleedFrame);bleedFrame=0;}
+}
+function tickBleed(){
+ bleedFrame=0;
+ paintBleed(trackOffset());
+ if(animating)bleedFrame=requestAnimationFrame(tickBleed);
+}
+function syncFrame(){paintBleed(pos());}
 function move(px,animate=false,duration=340){
  clearTimeout(transitionFallback);
  track.style.transition=animate?'transform '+duration+'ms var(--swipe-ease)':'none';
  track.style.transform='translate3d('+px+'px,0,0)';
  if(animate){
    animating=true;
+   if(!bleedFrame)bleedFrame=requestAnimationFrame(tickBleed);
    transitionFallback=setTimeout(complete,duration+80);
- }else animating=false;
+ }else{
+   animating=false;
+   stopBleed();
+   paintBleed(px);
+ }
 }
 function complete(){
  clearTimeout(transitionFallback);
  animating=false;
+ stopBleed();
  const normalized=canonical(index);
  if(normalized!==index){index=normalized;move(pos());}
  syncFrame();
@@ -121,6 +162,8 @@ function down(e){
    track.style.transition="none";
    track.style.transform="translate3d("+baseX+"px,0,0)";
    animating=false;
+   stopBleed();
+   paintBleed(baseX);
  }else baseX=pos();
  dragging=true;pointerId=e.pointerId;
  startX=lastX=e.clientX;
