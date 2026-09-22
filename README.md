@@ -1,32 +1,30 @@
 # PUP-PAD 🐾
 
-A lightweight, landscape-first static web interface for browsing six themed badges.
-Built with HTML, CSS and vanilla JavaScript; no backend or third-party scripts.
+A lightweight, landscape-first static web interface with six swipeable badge panels and interactive character previews. Built with HTML, CSS and vanilla JavaScript, without a backend or third-party scripts.
 
 ## Features
 
-- Paw-shield home button with press feedback.
-- Bidirectional looping carousel with momentum flicks and full-page snapping.
-- Six badge illustrations and a repeatable background pattern.
-- Configurable page colors, glow, vignette and portrait orientation reminder.
+- Press the paw-shield home button to start at Chase. Two opening audio clips play in sequence.
+- Swipe left or right through six badge panels in a continuous loop. Quick flicks can move across several panels; release snaps to a complete panel.
+- Tap a badge for press feedback, a dark character overlay and that character's audio clip. Tap anywhere on the overlay to stop playback and return to the same badge.
+- Responsive landscape layout, a repeatable background pattern, glow and vignette, and an orientation reminder.
 
 ## Files
 
-- `index.html` — interface and swipe logic.
-- `assets/home-paw-shield.png` — home button artwork.
-- `assets/badge-*.png` — six badge illustrations.
-- `assets/pattern-dog-bones.png` — repeating transparent pattern.
-- `.nojekyll` — compatibility with static GitHub Pages hosting.
+- `index.html` — page layout, visual styles and interactions.
+- `assets/home-paw-shield.png`, `assets/pattern-dog-bones.png` — home artwork and background pattern.
+- `assets/badge-*.png` — earlier badge illustrations, retained as optional alternatives.
+- `images/badge/` — badge images displayed by the current carousel.
+- `images/characters/` — character portraits for the overlay.
+- `audio/` — opening and character audio clips.
+- `.nojekyll` — static GitHub Pages configuration.
 
 ## Run
 
-Keep `index.html` and the `assets` folder together. Open `index.html` in a
-modern desktop browser, or serve this directory with a static web server.
-To install from a mobile browser's home-screen menu, host the files on a
-supported HTTP(S) website first. No offline service worker is included.
+Keep the directory structure intact. Open `index.html` in a modern desktop browser or serve the directory as a static website. On supported mobile browsers, use a user gesture to start audio and optionally add the hosted website to the home screen for a standalone landscape view.
 
-## Artwork
+A web app manifest and offline service worker are not included.
 
-The assets are original, fan-inspired illustrations, not official artwork.
-This project is unaffiliated with the owners of any referenced characters
-or trademarks.
+## Media and attribution
+
+This fan-made interface includes original interface illustrations and third-party character-related visual and audio material. The presence of media files in this repository does not grant reuse or redistribution rights to third-party content. Character, artwork, trademark and recording rights remain with their respective owners. This project is not officially affiliated with the franchise or its rights holders.

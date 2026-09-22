@@ -36,7 +36,7 @@ html{
 /* Overscan the bottom on landscape tablets; fall back to the synchronized
    document background if WebKit clips fixed elements to the safe viewport. */
 @media (min-width:980px) and (orientation:landscape){
- #home,#app{bottom:-54px}
+ #home,#app,#character-overlay{bottom:-54px}
 }
 @media (min-width:700px) and (orientation:portrait){
  #rotate{bottom:-54px}
@@ -53,11 +53,30 @@ html{
 #track{position:absolute;top:0;left:0;height:100%;display:flex;will-change:transform;transform:translate3d(0,0,0)}
 .slide{position:relative;isolation:isolate;display:grid;place-items:center;width:100vw;flex:0 0 100vw;height:100%;overflow:hidden;background:linear-gradient(180deg,var(--light),var(--base) 50%,var(--dark))}
 .slide::after{z-index:1}
-.badge{position:relative;z-index:2;display:block;width:min(46vw,67vh,430px);aspect-ratio:1;object-fit:contain;pointer-events:none;filter:drop-shadow(0 12px 24px rgba(0,0,0,.28))}
+.badge-trigger{appearance:none;position:relative;z-index:2;display:grid;place-items:center;width:min(46vw,67vh,430px);aspect-ratio:1;border:0;padding:0;background:transparent;cursor:pointer;touch-action:none;transition:transform 135ms ease,filter 135ms ease}
+.badge-trigger img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;filter:drop-shadow(0 12px 24px rgba(0,0,0,.28))}
+.badge-trigger.pressed,.badge-trigger:active{transform:scale(.89);filter:brightness(1.2) drop-shadow(0 0 16px rgba(255,255,255,.36))}
+.badge-trigger:focus-visible{outline:3px solid #fff;border-radius:24px}
+#character-overlay{position:fixed;inset:0;z-index:15;background:rgba(0,0,0,.76);overflow:hidden}
+@media (min-width:980px) and (orientation:landscape){#character-overlay{bottom:-54px}}
+#close-character{position:absolute;inset:0;display:grid;place-items:center;width:100%;height:100%;border:0;background:transparent;padding:0;cursor:pointer;touch-action:manipulation}
+#character-image{display:block;width:min(56vw,80vh,620px);height:min(80vh,620px);object-fit:contain;pointer-events:none;filter:drop-shadow(0 15px 25px rgba(0,0,0,.45));animation:character-appear 240ms ease-out both}
+@keyframes character-appear{from{opacity:.45;transform:scale(.91)}to{opacity:1;transform:scale(1)}}
+html.character-open{
+ background-image:
+  linear-gradient(rgba(0,0,0,.76),rgba(0,0,0,.76)),
+  radial-gradient(ellipse at 50% 44%,rgba(255,255,255,.19) 0%,transparent 35%,rgba(0,0,0,.12) 68%,rgba(0,9,28,.55) 100%),
+  url("assets/pattern-dog-bones.png"),
+  linear-gradient(to right,var(--bleed-left) 0%,var(--bleed-left) var(--bleed-split),var(--bleed-right) var(--bleed-split),var(--bleed-right) 100%);
+ background-size:100% 100%,100% 100%,var(--pattern-size) var(--pattern-size),100% 100%;
+ background-repeat:no-repeat,no-repeat,repeat,no-repeat;
+ background-position:center center,center center,var(--bleed-pattern-x) var(--bleed-pattern-y),center center;
+ background-blend-mode:normal,normal,soft-light,normal;
+}
 #rotate{display:none;position:fixed;inset:0;z-index:20;place-items:center;background:linear-gradient(160deg,#236ca5,#082c50);text-align:center;color:white;font-size:20px;padding:25px}
 #rotate>div{padding:25px;border-radius:24px;background:rgba(255,255,255,.13)}
 @media (orientation:portrait){#rotate{display:grid}}
-@media (prefers-reduced-motion:reduce){#track,#start{transition-duration:75ms!important}}
+@media (prefers-reduced-motion:reduce){#track,#start,.badge-trigger{transition-duration:75ms!important}#character-image{animation-duration:75ms!important}}
 </style>
 </head>
 <body>
@@ -67,24 +86,85 @@ html{
 <main id="app" class="screen hidden" aria-label="左右滑动选择狗狗">
  <div id="viewport"><div id="track"></div></div>
 </main>
+<div id="character-overlay" class="hidden" role="dialog" aria-modal="true" aria-label="角色展示">
+ <button id="close-character" type="button" aria-label="返回徽章选择"><img id="character-image" src="" alt=""></button>
+</div>
 <div id="rotate"><div>📱 请将设备横过来</div></div>
 <script>
 (()=>{
 "use strict";
 const pups=[
- {key:"chase",name:"Chase",c:["#398cdd","#145cb3","#0a315e"]},
- {key:"marshall",name:"Marshall",c:["#ff6c65","#dd1e25","#721218"]},
- {key:"skye",name:"Skye",c:["#ffa3d7","#e44b9d","#7b2c63"]},
- {key:"rubble",name:"Rubble",c:["#ffdf66","#efbb20","#7c590c"]},
- {key:"rocky",name:"Rocky",c:["#86db70","#22a148","#10532c"]},
- {key:"zuma",name:"Zuma",c:["#ffb96a","#ee842b","#86431b"]}
+ {key:"chase",name:"Chase",badge:"ChaseBadge.png",c:["#398cdd","#145cb3","#0a315e"]},
+ {key:"marshall",name:"Marshall",badge:"MarshallBadge.png",c:["#ff6c65","#dd1e25","#721218"]},
+ {key:"skye",name:"Skye",badge:"SkyBadge.png",c:["#ffa3d7","#e44b9d","#7b2c63"]},
+ {key:"rubble",name:"Rubble",badge:"RubbleBadge.png",c:["#ffdf66","#efbb20","#7c590c"]},
+ {key:"rocky",name:"Rocky",badge:"RockyBadge.png",c:["#86db70","#22a148","#10532c"]},
+ {key:"zuma",name:"Zuma",badge:"ZumaBadge.png",c:["#ffb96a","#ee842b","#86431b"]}
 ];
-const home=document.getElementById("home"),app=document.getElementById("app"),start=document.getElementById("start"),track=document.getElementById("track"),viewport=document.getElementById("viewport");
+const home=document.getElementById("home"),app=document.getElementById("app"),start=document.getElementById("start"),track=document.getElementById("track"),viewport=document.getElementById("viewport"),characterOverlay=document.getElementById("character-overlay"),characterImage=document.getElementById("character-image"),closeCharacter=document.getElementById("close-character");
 const realCount=pups.length;
 // A middle lap is always available; short or vigorous flicks can cross multiple pups.
 const visible=[...pups,...pups,...pups];
-track.innerHTML=visible.map(p=>'<section class="slide" role="group" aria-label="'+p.name+'" style="--light:'+p.c[0]+';--base:'+p.c[1]+';--dark:'+p.c[2]+'"><img class="badge" alt="'+p.name+' badge" draggable="false" src="assets/badge-'+p.key+'.png"></section>').join("");
-let index=realCount,dragging=false,animating=false,locked=false,startX=0,baseX=0,lastX=0,lastTime=0,velocity=0,pointerId=null,transitionFallback=null,samples=[];
+track.innerHTML=visible.map(p=>'<section class="slide" role="group" aria-label="'+p.name+'" style="--light:'+p.c[0]+';--base:'+p.c[1]+';--dark:'+p.c[2]+'"><button type="button" class="badge-trigger" data-pup="'+p.key+'" aria-label="选择 '+p.name+'"><img alt="'+p.name+' badge" draggable="false" src="images/badge/'+p.badge+'"></button></section>').join("");
+let index=realCount,dragging=false,animating=false,locked=false,startX=0,startY=0,baseX=0,lastX=0,lastTime=0,velocity=0,pointerId=null,transitionFallback=null,samples=[];
+let pressedBadge=null,movedBeyondTap=false,pointerStartedAt=0,overlayOpen=false,overlayReadyAt=0,revealTimer=null,lastBadgeFocus=null;
+const player=new Audio();
+player.preload="auto";
+let soundState="idle";
+function stopSound(){
+ soundState="idle";
+ player.pause();
+ try{player.currentTime=0;}catch{}
+}
+function playSound(src,state){
+ stopSound();
+ soundState=state;
+ player.src=src;
+ player.play().catch(()=>{if(soundState===state)soundState="idle";});
+}
+player.addEventListener("ended",()=>{
+ if(soundState==="intro-first"){
+   // Continue the opening sequence on the same media element on mobile.
+   playSound("audio/Ryder%20needs%20us.mp3","intro-second");
+ }else soundState="idle";
+});
+function showCharacter(key,badgeButton){
+ if(overlayOpen||revealTimer!==null)return;
+ const pup=pups.find(p=>p.key===key);
+ if(!pup)return;
+ // Begin playback in the user's activation, before the short reveal delay.
+ playSound("audio/"+pup.key+"-audio.wav","character");
+ lastBadgeFocus=badgeButton||null;
+ characterImage.src="images/characters/"+pup.key+".png";
+ characterImage.alt=pup.name;
+ index=canonical(index);
+ move(pos());
+ syncFrame();
+ revealTimer=setTimeout(()=>{
+   revealTimer=null;
+   if(pressedBadge){pressedBadge.classList.remove("pressed");pressedBadge=null;}
+   characterOverlay.classList.remove("hidden");
+   document.documentElement.classList.add("character-open");
+   overlayOpen=true;
+   overlayReadyAt=performance.now()+280; // Ignore synthetic click from opening tap.
+   closeCharacter.focus({preventScroll:true});
+ },140);
+}
+function dismissCharacter(){
+ if(!overlayOpen||performance.now()<overlayReadyAt)return;
+ overlayOpen=false;
+ characterOverlay.classList.add("hidden");
+ document.documentElement.classList.remove("character-open");
+ stopSound();
+ if(lastBadgeFocus)lastBadgeFocus.focus({preventScroll:true});
+}
+closeCharacter.addEventListener("click",dismissCharacter);
+track.addEventListener("click",e=>{
+ // Pointer activation is handled separately on pointerup to exclude swipes.
+ if(e.detail!==0||overlayOpen||revealTimer!==null)return;
+ const badge=e.target.closest(".badge-trigger");
+ if(badge)showCharacter(badge.dataset.pup,badge);
+});
 const canonical=i=>realCount+((i%realCount)+realCount)%realCount;
 const limit=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
 /* The document canvas can remain visible beneath a standalone tablet viewport.
@@ -147,10 +227,16 @@ track.addEventListener("transitionend",e=>{if(e.target===track&&e.propertyName==
 start.addEventListener("click",()=>{
  if(locked)return;
  locked=true;start.classList.add("pressed");
+ playSound("audio/PawPatrolIsOnARoll.mp3","intro-first");
  setTimeout(()=>{home.classList.add("hidden");app.classList.remove("hidden");index=realCount;move(pos());syncFrame();},230);
 });
 function down(e){
- if(app.classList.contains("hidden")||dragging||(!e.isPrimary&&e.pointerType!=="mouse"))return;
+ if(app.classList.contains("hidden")||dragging||overlayOpen||revealTimer!==null||(!e.isPrimary&&e.pointerType!=="mouse"))return;
+ pressedBadge=e.target.closest(".badge-trigger");
+ movedBeyondTap=false;
+ pointerStartedAt=performance.now();
+ startY=e.clientY||0;
+ if(pressedBadge)pressedBadge.classList.add("pressed");
  if(animating){
    // Interrupt an active settle without jumping: the three laps are identical.
    const matrix=getComputedStyle(track).transform;
@@ -182,6 +268,10 @@ function sample(x){
 function drag(e){
  if(!dragging||e.pointerId!==pointerId)return;
  sample(e.clientX);
+ if(Math.abs(e.clientX-startX)>14||Math.abs((e.clientY||0)-startY)>14){
+   movedBeyondTap=true;
+   if(pressedBadge)pressedBadge.classList.remove("pressed");
+ }
  // Track the finger across multiple screens while keeping the virtual track in bounds.
  const dx=limit((e.clientX-startX)*.96,-3*w(),3*w());
  move(baseX+dx);
@@ -191,6 +281,15 @@ function end(e,cancelled=false){
  dragging=false;
  sample(e.clientX);
  const dx=lastX-startX;
+ const tapped=!cancelled&&pressedBadge&&!movedBeyondTap&&Math.abs(dx)<=14&&Math.abs((e.clientY||0)-startY)<=14&&performance.now()-pointerStartedAt<650;
+ if(tapped){
+   const selectedBadge=pressedBadge;
+   pressedBadge=null;
+   showCharacter(selectedBadge.dataset.pup,selectedBadge);
+   setTimeout(()=>selectedBadge.classList.remove("pressed"),180);
+   return;
+ }
+ if(pressedBadge){pressedBadge.classList.remove("pressed");pressedBadge=null;}
  if(cancelled){
    index=limit(Math.round(-(baseX+dx*.96)/w()),0,visible.length-1);
  }else{
@@ -218,7 +317,11 @@ addEventListener("resize",()=>{
  syncFrame();
 });
 addEventListener("keydown",e=>{
- if(app.classList.contains("hidden")||dragging)return;
+ if(overlayOpen){
+   if(e.key==="Escape"){overlayReadyAt=0;dismissCharacter();}
+   return;
+ }
+ if(app.classList.contains("hidden")||dragging||revealTimer!==null)return;
  if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return;
  if(animating)complete();
  index+=(e.key==="ArrowRight"?1:-1);
