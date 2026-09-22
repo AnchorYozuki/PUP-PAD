@@ -144,12 +144,7 @@ function playSound(src,state){
  player.src=src;
  player.play().catch(()=>{if(soundState===state)soundState="idle";});
 }
-player.addEventListener("ended",()=>{
- if(soundState==="intro-first"){
-   // Continue the opening sequence on the same media element on mobile.
-   playSound("audio/Ryder%20needs%20us.mp3","intro-second");
- }else soundState="idle";
-});
+player.addEventListener("ended",()=>{soundState="idle";});
 function showCharacter(key,badgeButton){
  if(overlayOpen||revealTimer!==null)return;
  const pup=pups.find(p=>p.key===key);
@@ -162,15 +157,31 @@ function showCharacter(key,badgeButton){
  index=canonical(index);
  move(pos());
  syncFrame();
+ // Virtual carousel duplicates share the same artwork. Focus and align the
+ // canonical middle-lap badge even if the tap originated from another lap.
+ lastBadgeFocus=track.querySelectorAll(".badge-trigger")[index]||badgeButton||null;
  revealTimer=setTimeout(()=>{
    revealTimer=null;
    if(pressedBadge){pressedBadge.classList.remove("pressed");pressedBadge=null;}
    characterOverlay.classList.remove("hidden");
    document.documentElement.classList.add("character-open");
    overlayOpen=true;
+   alignCharacterToBadge();
+   if(lastBadgeFocus)lastBadgeFocus.classList.add("preview-hidden");
    overlayReadyAt=performance.now()+280; // Ignore synthetic click from opening tap.
    closeCharacter.focus({preventScroll:true});
  },140);
+}
+function alignCharacterToBadge(){
+ // Measure *after* opening the hidden overlay so its actual tablet overscan
+ // and the selected badge's actual onscreen center are both accounted for.
+ if(!lastBadgeFocus)return;
+ const badgeRect=lastBadgeFocus.getBoundingClientRect();
+ const overlayRect=closeCharacter.getBoundingClientRect();
+ const dx=badgeRect.left+badgeRect.width/2-overlayRect.left-overlayRect.width/2;
+ const dy=badgeRect.top+badgeRect.height/2-overlayRect.top-overlayRect.height/2;
+ characterImage.style.setProperty("--badge-dx",dx.toFixed(2)+"px");
+ characterImage.style.setProperty("--badge-dy",dy.toFixed(2)+"px");
 }
 function dismissCharacter(){
  if(!overlayOpen||performance.now()<overlayReadyAt)return;
@@ -178,7 +189,10 @@ function dismissCharacter(){
  characterOverlay.classList.add("hidden");
  document.documentElement.classList.remove("character-open");
  stopSound();
- if(lastBadgeFocus)lastBadgeFocus.focus({preventScroll:true});
+ if(lastBadgeFocus){
+   lastBadgeFocus.classList.remove("preview-hidden");
+   lastBadgeFocus.focus({preventScroll:true});
+ }
 }
 closeCharacter.addEventListener("click",dismissCharacter);
 track.addEventListener("click",e=>{
@@ -249,7 +263,7 @@ track.addEventListener("transitionend",e=>{if(e.target===track&&e.propertyName==
 start.addEventListener("click",()=>{
  if(locked)return;
  locked=true;start.classList.add("pressed");
- playSound("audio/PawPatrolIsOnARoll.mp3","intro-first");
+ playSound("audio/Ryder%20needs%20us.mp3","intro");
  setTimeout(()=>{home.classList.add("hidden");app.classList.remove("hidden");index=realCount;move(pos());syncFrame();},230);
 });
 function down(e){
@@ -337,6 +351,7 @@ addEventListener("resize",()=>{
  index=canonical(index);
  move(pos());
  syncFrame();
+ if(overlayOpen)requestAnimationFrame(alignCharacterToBadge);
 });
 addEventListener("keydown",e=>{
  if(overlayOpen){
