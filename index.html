@@ -105,7 +105,65 @@ const realCount=pups.length;
 // A middle lap is always available; short or vigorous flicks can cross multiple pups.
 const visible=[...pups,...pups,...pups];
 track.innerHTML=visible.map(p=>'<section class="slide" role="group" aria-label="'+p.name+'" style="--light:'+p.c[0]+';--base:'+p.c[1]+';--dark:'+p.c[2]+'"><button type="button" class="badge-trigger" data-pup="'+p.key+'" aria-label="选择 '+p.name+'"><img alt="'+p.name+' badge" draggable="false" src="images/badge/'+p.badge+'"></button></section>').join("");
-let index=realCount,dragging=false,animating=false,locked=false,startX=0,baseX=0,lastX=0,lastTime=0,velocity=0,pointerId=null,transitionFallback=null,samples=[];
+let index=realCount,dragging=false,animating=false,locked=false,startX=0,startY=0,baseX=0,lastX=0,lastTime=0,velocity=0,pointerId=null,transitionFallback=null,samples=[];
+let pressedBadge=null,movedBeyondTap=false,pointerStartedAt=0,overlayOpen=false,overlayReadyAt=0,revealTimer=null,lastBadgeFocus=null;
+const player=new Audio();
+player.preload="auto";
+let soundState="idle";
+function stopSound(){
+ soundState="idle";
+ player.pause();
+ try{player.currentTime=0;}catch{}
+}
+function playSound(src,state){
+ stopSound();
+ soundState=state;
+ player.src=src;
+ player.play().catch(()=>{if(soundState===state)soundState="idle";});
+}
+player.addEventListener("ended",()=>{
+ if(soundState==="intro-first"){
+   // Continue the opening sequence on the same media element on mobile.
+   playSound("audio/Ryder%20needs%20us.mp3","intro-second");
+ }else soundState="idle";
+});
+function showCharacter(key,badgeButton){
+ if(overlayOpen||revealTimer!==null)return;
+ const pup=pups.find(p=>p.key===key);
+ if(!pup)return;
+ // Begin playback in the user's activation, before the short reveal delay.
+ playSound("audio/"+pup.key+"-audio.wav","character");
+ lastBadgeFocus=badgeButton||null;
+ characterImage.src="images/characters/"+pup.key+".png";
+ characterImage.alt=pup.name;
+ index=canonical(index);
+ move(pos());
+ syncFrame();
+ revealTimer=setTimeout(()=>{
+   revealTimer=null;
+   if(pressedBadge){pressedBadge.classList.remove("pressed");pressedBadge=null;}
+   characterOverlay.classList.remove("hidden");
+   document.documentElement.classList.add("character-open");
+   overlayOpen=true;
+   overlayReadyAt=performance.now()+280; // Ignore synthetic click from opening tap.
+   closeCharacter.focus({preventScroll:true});
+ },140);
+}
+function dismissCharacter(){
+ if(!overlayOpen||performance.now()<overlayReadyAt)return;
+ overlayOpen=false;
+ characterOverlay.classList.add("hidden");
+ document.documentElement.classList.remove("character-open");
+ stopSound();
+ if(lastBadgeFocus)lastBadgeFocus.focus({preventScroll:true});
+}
+closeCharacter.addEventListener("click",dismissCharacter);
+track.addEventListener("click",e=>{
+ // Pointer activation is handled separately on pointerup to exclude swipes.
+ if(e.detail!==0||overlayOpen||revealTimer!==null)return;
+ const badge=e.target.closest(".badge-trigger");
+ if(badge)showCharacter(badge.dataset.pup,badge);
+});
 const canonical=i=>realCount+((i%realCount)+realCount)%realCount;
 const limit=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
 /* The document canvas can remain visible beneath a standalone tablet viewport.
@@ -168,10 +226,16 @@ track.addEventListener("transitionend",e=>{if(e.target===track&&e.propertyName==
 start.addEventListener("click",()=>{
  if(locked)return;
  locked=true;start.classList.add("pressed");
+ playSound("audio/PawPatrolIsOnARoll.mp3","intro-first");
  setTimeout(()=>{home.classList.add("hidden");app.classList.remove("hidden");index=realCount;move(pos());syncFrame();},230);
 });
 function down(e){
- if(app.classList.contains("hidden")||dragging||(!e.isPrimary&&e.pointerType!=="mouse"))return;
+ if(app.classList.contains("hidden")||dragging||overlayOpen||revealTimer!==null||(!e.isPrimary&&e.pointerType!=="mouse"))return;
+ pressedBadge=e.target.closest(".badge-trigger");
+ movedBeyondTap=false;
+ pointerStartedAt=performance.now();
+ startY=e.clientY||0;
+ if(pressedBadge)pressedBadge.classList.add("pressed");
  if(animating){
    // Interrupt an active settle without jumping: the three laps are identical.
    const matrix=getComputedStyle(track).transform;
@@ -203,6 +267,10 @@ function sample(x){
 function drag(e){
  if(!dragging||e.pointerId!==pointerId)return;
  sample(e.clientX);
+ if(Math.abs(e.clientX-startX)>14||Math.abs((e.clientY||0)-startY)>14){
+   movedBeyondTap=true;
+   if(pressedBadge)pressedBadge.classList.remove("pressed");
+ }
  // Track the finger across multiple screens while keeping the virtual track in bounds.
  const dx=limit((e.clientX-startX)*.96,-3*w(),3*w());
  move(baseX+dx);
@@ -212,6 +280,15 @@ function end(e,cancelled=false){
  dragging=false;
  sample(e.clientX);
  const dx=lastX-startX;
+ const tapped=!cancelled&&pressedBadge&&!movedBeyondTap&&Math.abs(dx)<=14&&Math.abs((e.clientY||0)-startY)<=14&&performance.now()-pointerStartedAt<650;
+ if(tapped){
+   const selectedBadge=pressedBadge;
+   pressedBadge=null;
+   showCharacter(selectedBadge.dataset.pup,selectedBadge);
+   setTimeout(()=>selectedBadge.classList.remove("pressed"),180);
+   return;
+ }
+ if(pressedBadge){pressedBadge.classList.remove("pressed");pressedBadge=null;}
  if(cancelled){
    index=limit(Math.round(-(baseX+dx*.96)/w()),0,visible.length-1);
  }else{
@@ -239,7 +316,11 @@ addEventListener("resize",()=>{
  syncFrame();
 });
 addEventListener("keydown",e=>{
- if(app.classList.contains("hidden")||dragging)return;
+ if(overlayOpen){
+   if(e.key==="Escape"){overlayReadyAt=0;dismissCharacter();}
+   return;
+ }
+ if(app.classList.contains("hidden")||dragging||revealTimer!==null)return;
  if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return;
  if(animating)complete();
  index+=(e.key==="ArrowRight"?1:-1);
