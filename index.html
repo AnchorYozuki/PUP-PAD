@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b5e9e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Ryder's Pup Pad</title>
+<style>
+:root{--pattern-size:256px;--pattern-opacity:.14;--swipe-duration:340ms;--swipe-ease:cubic-bezier(.17,.78,.21,1)}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;background:#092e54}
+body{font-family:system-ui,-apple-system,sans-serif;background:transparent}
+/* iPadOS standalone may reserve a lower safe-area strip outside the fixed viewport.
+   Give the document canvas the current page's palette rather than exposing the old blue body. */
+html{
+ --frame-light:#409acb;--frame-base:#0c477c;--frame-dark:#092d52;
+ background:
+  radial-gradient(ellipse at 50% 44%,rgba(255,255,255,.19) 0%,transparent 35%,rgba(0,0,0,.12) 68%,rgba(0,9,28,.55) 100%),
+  linear-gradient(180deg,var(--frame-light),var(--frame-base) 50%,var(--frame-dark));
+ background-color:var(--frame-dark);
+}
+.screen{position:fixed;inset:0;overflow:hidden}
+/* Overscan the bottom on landscape tablets; fall back to the synchronized
+   document background if WebKit clips fixed elements to the safe viewport. */
+@media (min-width:980px) and (orientation:landscape){
+ #home,#app{bottom:-54px}
+}
+@media (min-width:700px) and (orientation:portrait){
+ #rotate{bottom:-54px}
+}
+.hidden{display:none!important}
+#home{display:grid;place-items:center;background:radial-gradient(ellipse at 50% 35%,#409acb 0%,#1b71ae 36%,#0c477c 78%,#092d52 100%);isolation:isolate}
+#home::before,.slide::before{content:"";position:absolute;inset:-10%;pointer-events:none;background:url("assets/pattern-dog-bones.png") repeat;background-size:var(--pattern-size) var(--pattern-size);opacity:var(--pattern-opacity)}
+#home::after,.slide::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 44%,rgba(255,255,255,.19) 0%,transparent 35%,rgba(0,0,0,.12) 68%,rgba(0,9,28,.55) 100%)}
+#start{appearance:none;position:relative;z-index:1;display:grid;place-items:center;width:min(45vw,61vh,350px);aspect-ratio:1;border:0;background:none;padding:0;cursor:pointer;touch-action:manipulation;transition:transform 130ms ease,filter 130ms ease}
+#start img{display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(0,10,30,.43)) drop-shadow(0 0 18px rgba(130,220,255,.45))}
+#start:active,#start.pressed{transform:scale(.89);filter:brightness(1.22)}
+#app{background:#092e54}
+#viewport{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab}
+#track{position:absolute;top:0;left:0;height:100%;display:flex;will-change:transform;transform:translate3d(0,0,0)}
+.slide{position:relative;isolation:isolate;display:grid;place-items:center;width:100vw;flex:0 0 100vw;height:100%;overflow:hidden;background:linear-gradient(180deg,var(--light),var(--base) 50%,var(--dark))}
+.slide::after{z-index:1}
+.badge{position:relative;z-index:2;display:block;width:min(46vw,67vh,430px);aspect-ratio:1;object-fit:contain;pointer-events:none;filter:drop-shadow(0 12px 24px rgba(0,0,0,.28))}
+#rotate{display:none;position:fixed;inset:0;z-index:20;place-items:center;background:linear-gradient(160deg,#236ca5,#082c50);text-align:center;color:white;font-size:20px;padding:25px}
+#rotate>div{padding:25px;border-radius:24px;background:rgba(255,255,255,.13)}
+@media (orientation:portrait){#rotate{display:grid}}
+@media (prefers-reduced-motion:reduce){#track,#start{transition-duration:75ms!important}}
+</style>
+</head>
+<body>
+<main id="home" class="screen">
+ <button id="start" aria-label="启动 Pup Pad"><img src="assets/home-paw-shield.png" alt="Pup Pad 爪印徽章"></button>
+</main>
+<main id="app" class="screen hidden" aria-label="左右滑动选择狗狗">
+ <div id="viewport"><div id="track"></div></div>
+</main>
+<div id="rotate"><div>📱 请将设备横过来</div></div>
+<script>
+(()=>{
+"use strict";
+const pups=[
+ {key:"chase",name:"Chase",c:["#398cdd","#145cb3","#0a315e"]},
+ {key:"marshall",name:"Marshall",c:["#ff6c65","#dd1e25","#721218"]},
+ {key:"skye",name:"Skye",c:["#ffa3d7","#e44b9d","#7b2c63"]},
+ {key:"rubble",name:"Rubble",c:["#ffdf66","#efbb20","#7c590c"]},
+ {key:"rocky",name:"Rocky",c:["#86db70","#22a148","#10532c"]},
+ {key:"zuma",name:"Zuma",c:["#ffb96a","#ee842b","#86431b"]}
+];
+const home=document.getElementById("home"),app=document.getElementById("app"),start=document.getElementById("start"),track=document.getElementById("track"),viewport=document.getElementById("viewport");
+const realCount=pups.length;
+// A middle lap is always available; short or vigorous flicks can cross multiple pups.
+const visible=[...pups,...pups,...pups];
+track.innerHTML=visible.map(p=>'<section class="slide" role="group" aria-label="'+p.name+'" style="--light:'+p.c[0]+';--base:'+p.c[1]+';--dark:'+p.c[2]+'"><img class="badge" alt="'+p.name+' badge" draggable="false" src="assets/badge-'+p.key+'.png"></section>').join("");
+let index=realCount,dragging=false,animating=false,locked=false,startX=0,baseX=0,lastX=0,lastTime=0,velocity=0,pointerId=null,transitionFallback=null,samples=[];
+const canonical=i=>realCount+((i%realCount)+realCount)%realCount;
+const limit=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
+function syncFrame(){
+ const p=pups[((index%realCount)+realCount)%realCount];
+ const root=document.documentElement;
+ root.style.setProperty('--frame-light',p.c[0]);
+ root.style.setProperty('--frame-base',p.c[1]);
+ root.style.setProperty('--frame-dark',p.c[2]);
+}
+
+const w=()=>viewport.clientWidth||innerWidth;
+const pos=()=>-index*w();
+function move(px,animate=false,duration=340){
+ clearTimeout(transitionFallback);
+ track.style.transition=animate?'transform '+duration+'ms var(--swipe-ease)':'none';
+ track.style.transform='translate3d('+px+'px,0,0)';
+ if(animate){
+   animating=true;
+   transitionFallback=setTimeout(complete,duration+80);
+ }else animating=false;
+}
+function complete(){
+ clearTimeout(transitionFallback);
+ animating=false;
+ const normalized=canonical(index);
+ if(normalized!==index){index=normalized;move(pos());}
+ syncFrame();
+}
+track.addEventListener("transitionend",e=>{if(e.target===track&&e.propertyName==="transform")complete();});
+start.addEventListener("click",()=>{
+ if(locked)return;
+ locked=true;start.classList.add("pressed");
+ setTimeout(()=>{home.classList.add("hidden");app.classList.remove("hidden");index=realCount;move(pos());syncFrame();},230);
+});
+function down(e){
+ if(app.classList.contains("hidden")||dragging||(!e.isPrimary&&e.pointerType!=="mouse"))return;
+ if(animating){
+   // Interrupt an active settle without jumping: the three laps are identical.
+   const matrix=getComputedStyle(track).transform;
+   const observed=matrix&&matrix!=="none"?new DOMMatrixReadOnly(matrix).m41:pos();
+   clearTimeout(transitionFallback);
+   const virtual=Math.round(-observed/w());
+   index=canonical(virtual);
+   baseX=observed+(virtual-index)*w();
+   track.style.transition="none";
+   track.style.transform="translate3d("+baseX+"px,0,0)";
+   animating=false;
+ }else baseX=pos();
+ dragging=true;pointerId=e.pointerId;
+ startX=lastX=e.clientX;
+ lastTime=performance.now();velocity=0;
+ samples=[{x:e.clientX,t:lastTime}];
+ try{viewport.setPointerCapture(pointerId);}catch{}
+}
+function sample(x){
+ const now=performance.now();
+ samples.push({x,t:now});
+ while(samples.length>2&&now-samples[0].t>110)samples.shift();
+ const old=samples[0],dt=now-old.t;
+ velocity=dt>=12?limit((x-old.x)/dt,-4,4):0;
+ lastX=x;lastTime=now;
+}
+function drag(e){
+ if(!dragging||e.pointerId!==pointerId)return;
+ sample(e.clientX);
+ // Track the finger across multiple screens while keeping the virtual track in bounds.
+ const dx=limit((e.clientX-startX)*.96,-3*w(),3*w());
+ move(baseX+dx);
+}
+function end(e,cancelled=false){
+ if(!dragging||e.pointerId!==pointerId)return;
+ dragging=false;
+ sample(e.clientX);
+ const dx=lastX-startX;
+ if(cancelled){
+   index=limit(Math.round(-(baseX+dx*.96)/w()),0,visible.length-1);
+ }else{
+   const projected=dx+velocity*560; // short, speed-dependent inertia in px
+   const deliberate=Math.abs(dx)>w()*.17||(Math.abs(velocity)>.50&&Math.abs(dx)>24);
+   if(deliberate){
+     const pages=limit(Math.max(1,Math.round(Math.abs(projected)/w())),1,3);
+     index=limit(index+(projected<0?pages:-pages),0,visible.length-1);
+   }
+ }
+ const distance=Math.abs(-index*w()-(baseX+dx*.96));
+ if(distance<.5){move(pos());complete();return;}
+ const duration=Math.round(limit(280+distance/w()*115-Math.abs(velocity)*32,250,620));
+ move(pos(),true,duration);
+}
+viewport.addEventListener("pointerdown",down);
+viewport.addEventListener("pointermove",drag);
+viewport.addEventListener("pointerup",e=>end(e));
+viewport.addEventListener("pointercancel",e=>end(e,true));
+viewport.addEventListener("lostpointercapture",e=>end(e,true));
+addEventListener("resize",()=>{
+ clearTimeout(transitionFallback);animating=false;dragging=false;
+ index=canonical(index);
+ move(pos());
+ syncFrame();
+});
+addEventListener("keydown",e=>{
+ if(app.classList.contains("hidden")||dragging)return;
+ if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return;
+ if(animating)complete();
+ index+=(e.key==="ArrowRight"?1:-1);
+ move(pos(),true,300);
+});
+})();
+</script>
+</body>
+</html>
