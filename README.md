@@ -4,15 +4,15 @@ A lightweight, landscape-first static web interface with six swipeable badge pan
 
 ## Features
 
-- Press the paw-shield home button to start at Chase. Two opening audio clips play in sequence.
+- Press the logo on the home screen to start at Chase and play one opening audio clip.
 - Swipe left or right through six badge panels in a continuous loop. Quick flicks can move across several panels; release snaps to a complete panel.
-- Tap a badge for press feedback, a dark character overlay and that character's audio clip. Tap anywhere on the overlay to stop playback and return to the same badge.
-- Responsive landscape layout, a repeatable background pattern, glow and vignette, and an orientation reminder.
+- Tap a badge for press feedback, a dark character overlay with a centered portrait and the matching audio clip. Tap anywhere on the overlay to stop playback and return to the same badge.
+- Responsive landscape layout with a repeatable background pattern, glow, vignette, a bottom safe-area blend and an orientation reminder.
 
 ## Files
 
 - `index.html` — page layout, visual styles and interactions.
-- `assets/home-paw-shield.png`, `assets/pattern-dog-bones.png` — home artwork and background pattern.
+- `images/badge/PawPatrolLogo.png`, `assets/pattern-dog-bones.png` — home artwork and background pattern.
 - `assets/badge-*.png` — earlier badge illustrations, retained as optional alternatives.
 - `images/badge/` — badge images displayed by the current carousel.
 - `images/characters/` — character portraits for the overlay.
